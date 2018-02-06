@@ -17,17 +17,18 @@ type Cube interface {
 	From(c Cube) Cube
 	FromTable(table string) Cube
 	SQL(sql string, a ...interface{}) Cube
-	SQLCfg(tplcfg TplCfg) Cube
+	Replace(tplcfg TplCfg) Cube
 	SummarySQL(name string, sql string, a ...interface{}) Cube
-	RetFieldsMapping(mapping map[string]string) Cube
-	SummaryFieldsMapping(name string, mapping map[string]string) Cube
+	GroupSummary(name, method string, fields []string) Cube
+	ContrastSummary(name string, fields []string) Cube
+	RetMapping(mapping map[string]string) Cube
 	Link(alias string, cube Cube) Cube
 
 	ToSQL() string
-	GetRows() (source.Rows, error)
-	GetRow() (source.Row, error)
+	Rows() (source.Rows, error)
+	Row() (source.Row, error)
 	Fields() ([]string, error)
-	GetSummary() (map[string]source.Row, error)
+	Summary() (map[string]source.Row, error)
 
 	Escape(s string) string
 	EscapeFields(fields []string) []string

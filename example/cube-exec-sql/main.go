@@ -11,6 +11,7 @@ func cube_exec_sql() cube.Cube {
 	c := cube.New().SQL("SELECT * FROM skyline.clients")
 	return c.SQL(`SELECT t.* FROM @THIS@ AS t WHERE t.id=10`)
 }
+
 func main() {
 	reports := engine.NewReports()
 	reports.AddCube("cube exec SQL example", cube_exec_sql())

@@ -17,6 +17,17 @@ func FileExists(filename string) bool {
 	return exist
 }
 
+func PathExists(path string) (bool, error) {
+	_, err := os.Stat(path)
+	if err == nil {
+		return true, nil
+	}
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	return false, err
+}
+
 func WriteFile(filename string, content []byte) error {
 	return ioutil.WriteFile(filename, content, 0666)
 }
@@ -51,3 +62,4 @@ func CurrDir() string {
 	}
 	return path.Dir(file)
 }
+

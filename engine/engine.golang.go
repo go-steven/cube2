@@ -4,8 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/go-steven/cube2/util"
+	"github.com/go-steven/cube2/util/dirzip"
 	"github.com/go-steven/cube2/util/errors"
 	"os"
+	"path"
+	"strings"
 )
 
 const (
@@ -26,23 +29,27 @@ func (e *GoEngine) Execute(script string, tplcfgs string) (map[string]*ReportRet
 	Logger.Infof("Execute:")
 	Logger.Info(script)
 	Logger.Infof("tplcfgs: %s", tplcfgs)
-	// save script to .go file
-	scriptFile := fmt.Sprintf("%s%s_main.go", e.tmpdir, util.Token())
-	Logger.Infof("script file: %s", scriptFile)
-	if err := util.WriteFile(scriptFile, []byte(script)); err != nil {
+	tmpdir := e.tmpdir + "cube" + util.Token() + "/"
+	if err := os.Mkdir(tmpdir, 0777); err != nil {
 		return nil, errors.NewErr(err)
 	}
+	// save script files to tmpdir
+	if err := dirzip.UnZip(script, tmpdir, true); err != nil {
+		return nil, err
+	}
+
 	// save tplcfgs to .cfg file
-	cfgFile := fmt.Sprintf("%s%s_tpl.cfg", e.tmpdir, util.Token())
+	cfgFile := fmt.Sprintf("%s%s_tpl.cfg", tmpdir, util.Token())
 	Logger.Infof("cfg file: %s", cfgFile)
 	if err := util.WriteFile(cfgFile, []byte(tplcfgs)); err != nil {
 		return nil, errors.NewErr(err)
 	}
 
-	outputFile := fmt.Sprintf("%s%s.output", e.tmpdir, util.Token())
+	outputFile := fmt.Sprintf("%s%s.output", tmpdir, util.Token())
 	Logger.Infof("output file: %s", outputFile)
 	// run shell and save the result to a file
-	cmd := fmt.Sprintf(`go run %s --tplcfg=%s --output=%s`, scriptFile, cfgFile, outputFile)
+	logfile := "/home/steven/var/code/go/src/github.com/go-steven/cube2/bin/go-engine/cube.log"
+	cmd := fmt.Sprintf(`cd %s; go build; ./%s --log=%s --tplcfg=%s --output=%s 2>&1`, tmpdir, path.Base(tmpdir), logfile, cfgFile, outputFile)
 	Logger.Infof("run shell: %s", cmd)
 	_, err := util.ExecShell(cmd)
 	if err != nil {
@@ -61,16 +68,12 @@ func (e *GoEngine) Execute(script string, tplcfgs string) (map[string]*ReportRet
 	}
 	//Logger.Infof("reports: %s", util.Json(reports))
 	// cleanup
-	if err := util.RemoveFile(scriptFile); err != nil {
-		Logger.Error(errors.NewErr(err))
+	if strings.HasPrefix(tmpdir, "/tmp/") {
+		Logger.Infof("Deleted tmp dir: %s", tmpdir)
+		if err := os.RemoveAll(tmpdir); err != nil {
+			Logger.Error(errors.NewErr(err))
+		}
 	}
-	if err := util.RemoveFile(cfgFile); err != nil {
-		Logger.Error(errors.NewErr(err))
-	}
-	if err := util.RemoveFile(outputFile); err != nil {
-		Logger.Error(errors.NewErr(err))
-	}
-
 	return reports, nil
 }
 

@@ -1,0 +1,30 @@
+package main
+
+import (
+	"flag"
+	"github.com/go-steven/cube2/engine"
+	"github.com/go-steven/cube2/util/logger"
+)
+
+var (
+	Logger        = logger.Logger
+	logFlag       = flag.String("log", "", "set log path")
+	tplConfigFlag = flag.String("tplcfg", "", "set tpl config file, .json")
+	outputFlag    = flag.String("output", "", "set reports json output")
+)
+
+func main() {
+	flag.Parse()
+	if *outputFlag == "" {
+		flag.Usage()
+		return
+	}
+	Logger = logger.SetGlobalLogger(*logFlag)
+	engine.SetLogger(Logger)
+
+	reports := Reports()
+	if err := reports.RunAndSave(*tplConfigFlag, *outputFlag); err != nil {
+		Logger.Error(err)
+		return
+	}
+}

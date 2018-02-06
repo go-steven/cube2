@@ -5,6 +5,7 @@ import (
 	"github.com/bububa/mymysql/autorc"
 	_ "github.com/bububa/mymysql/thrsafe"
 	"github.com/go-steven/cube2/source"
+	"github.com/go-steven/cube2/util"
 	"github.com/go-steven/cube2/util/dbconn"
 	"github.com/go-steven/cube2/util/errors"
 	"strings"
@@ -17,7 +18,7 @@ type DefaultCube struct {
 	cubes   map[string]Cube
 	summary map[string]Cube
 
-	retFieldsMapping map[string]string
+	retMapping map[string]string
 
 	m *sync.RWMutex // 用于并发
 }
@@ -28,10 +29,10 @@ func New() *DefaultCube {
 
 func NewDefaultCube(db *autorc.Conn) *DefaultCube {
 	c := &DefaultCube{
-		db:               source.NewMysql(db),
-		cubes:            make(map[string]Cube),
-		summary:          make(map[string]Cube),
-		retFieldsMapping: make(map[string]string),
+		db:         source.NewMysql(db),
+		cubes:      make(map[string]Cube),
+		summary:    make(map[string]Cube),
+		retMapping: make(map[string]string),
 
 		m: new(sync.RWMutex),
 	}
@@ -89,14 +90,58 @@ func (c *DefaultCube) SummarySQL(name string, sql string, a ...interface{}) Cube
 	return c
 }
 
-func (c *DefaultCube) RetFieldsMapping(mapping map[string]string) Cube {
-	c.retFieldsMapping = mapping
-	return c
-}
-func (c *DefaultCube) SummaryFieldsMapping(name string, mapping map[string]string) Cube {
-	if v, ok := c.summary[name]; ok {
-		v.RetFieldsMapping(mapping)
+func (c *DefaultCube) GroupSummary(name, method string, fields []string) Cube {
+	name = util.Trim(name)
+	method = util.UpperTrim(method)
+	if len(fields) == 0 || name == "" || method == "" {
+		return c
 	}
+
+	sql := fmt.Sprintf(`SELECT 
+`)
+	cnt := len(fields)
+	method = c.Escape(method)
+	for i, v := range fields {
+		new_v := c.Escape(v)
+		sql += fmt.Sprintf(`%s(%s) AS %s`, method, new_v, new_v)
+		if i < cnt-1 {
+			sql += ","
+		}
+		sql += fmt.Sprintf(` 
+`)
+	}
+	sql += `FROM @CUBE@ AS s`
+	return c.SummarySQL(name, sql)
+}
+
+func (c *DefaultCube) ContrastSummary(name string, fields []string) Cube {
+	name = util.Trim(name)
+	if len(fields) == 0 || name == "" {
+		return c
+	}
+	sql := fmt.Sprintf(`SELECT 
+`)
+	cnt := len(fields)
+	for i, v := range fields {
+		new_v := c.Escape(v)
+		sql += fmt.Sprintf(`IF(a.%s IS NULL OR a.%s=0, 0, ROUND((b.%s - a.%s) / a.%s, 4)) AS %s`, new_v, new_v, new_v, new_v, new_v, new_v)
+		if i < cnt-1 {
+			sql += ","
+		}
+		sql += fmt.Sprintf(` 
+`)
+	}
+	sql += `FROM (SELECT 1 AS ttt_id, t.* FROM @CUBE@ AS t LIMIT 0, 1) AS a
+    INNER JOIN (SELECT 1 AS ttt_id, t.* FROM @CUBE@ AS t LIMIT 1, 1) AS b ON b.ttt_id = a.ttt_id`
+	return c.SummarySQL(name, sql)
+}
+
+func (c *DefaultCube) RetMapping(mapping map[string]string) Cube {
+	c.retMapping = mapping
+	for _, v := range c.summary {
+		v.RetMapping(mapping)
+	}
+
 	return c
 }
 
@@ -114,7 +159,7 @@ func (c *DefaultCube) Link(alias string, cube Cube) Cube {
 	return c
 }
 
-func (c *DefaultCube) SQLCfg(tplcfg TplCfg) Cube {
+func (c *DefaultCube) Replace(tplcfg TplCfg) Cube {
 	sql := c.ToSQL()
 	for tpl_var, tpl_val := range tplcfg {
 		tpl_var = CubeTplVar(tpl_var)
@@ -147,7 +192,7 @@ func (c *DefaultCube) ToSQL() string {
 	return c.get_cube_sql()
 }
 
-func (c *DefaultCube) GetRows() (source.Rows, error) {
+func (c *DefaultCube) Rows() (source.Rows, error) {
 	if c == nil {
 		return nil, errors.New("empty cube.")
 	}
@@ -161,10 +206,10 @@ func (c *DefaultCube) GetRows() (source.Rows, error) {
 		return nil, err
 	}
 
-	return rows.FieldsMapping(c.retFieldsMapping), nil
+	return rows.FieldsMapping(c.retMapping), nil
 }
 
-func (c *DefaultCube) GetRow() (source.Row, error) {
+func (c *DefaultCube) Row() (source.Row, error) {
 	if c == nil {
 		return nil, errors.New("empty cube.")
 	}
@@ -177,16 +222,16 @@ func (c *DefaultCube) GetRow() (source.Row, error) {
 		return nil, err
 	}
 
-	return row.FieldsMapping(c.retFieldsMapping), nil
+	return row.FieldsMapping(c.retMapping), nil
 }
 
-func (c *DefaultCube) GetSummary() (ret map[string]source.Row, err error) {
+func (c *DefaultCube) Summary() (ret map[string]source.Row, err error) {
 	if c == nil {
 		return nil, errors.New("empty cube.")
 	}
 	ret = make(map[string]source.Row)
 	for k, v := range c.summary {
-		row, err := v.GetRow()
+		row, err := v.Row()
 		if err != nil {
 			return nil, err
 		}
@@ -209,7 +254,7 @@ func (c *DefaultCube) Fields() ([]string, error) {
 	}
 	ret := []string{}
 	for _, v := range fields {
-		new_v, ok := c.retFieldsMapping[v]
+		new_v, ok := c.retMapping[v]
 		if ok {
 			ret = append(ret, new_v)
 		} else {
@@ -248,16 +293,16 @@ func (c *DefaultCube) set_cube_sql(sql string) {
 
 func (c *DefaultCube) Copy() Cube {
 	cube := &DefaultCube{
-		db:               c.db,
-		cubes:            make(map[string]Cube),
-		summary:          make(map[string]Cube),
-		retFieldsMapping: make(map[string]string),
-		m:                new(sync.RWMutex),
+		db:         c.db,
+		cubes:      make(map[string]Cube),
+		summary:    make(map[string]Cube),
+		retMapping: make(map[string]string),
+		m:          new(sync.RWMutex),
 	}
 	cube.Link(CubeTplVar(CUBE_THIS), cube)
 	c.m.RLock()
 	cube.sql = c.sql
-	cube.retFieldsMapping = c.retFieldsMapping
+	cube.retMapping = c.retMapping
 	for k, v := range c.cubes {
 		cube.cubes[k] = v
 	}

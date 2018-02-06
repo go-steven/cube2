@@ -14,6 +14,9 @@ func ReadTplCfgFile(tplCfgFile string) (TplCfg, error) {
 		return nil, errors.NewErr(err)
 	}
 	tplCfgs := make(TplCfg)
+	if util.Trim(string(content)) == "" {
+		return tplCfgs, nil
+	}
 	if err := json.Unmarshal(content, &tplCfgs); err != nil {
 		return nil, errors.Errorf("ERROR Unmarshal: %v", err.Error())
 	}

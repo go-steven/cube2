@@ -20,13 +20,14 @@ func NewMysql(db *autorc.Conn) *Mysql {
 	}
 }
 func (m *Mysql) Query(sql string) (Rows, error) {
-	//Logger.Infof("MYSQL run SQL: %s\n", sql)
+	Logger.Infof("MYSQL run SQL: %s\n", sql)
 	if m.sqlForbid != nil && SqlForbid(sql, m.sqlForbid) {
 		Logger.Errorf("MYSQL run SQL: %s\n", sql)
 		return nil, errors.New("ERROR: has not-allowed keywords in SQL.")
 	}
 	rows, res, err := m.db.Query(sql)
 	if err != nil {
+		Logger.Errorf("MYSQL run SQL: %s\n", sql)
 		return nil, errors.NewErr(err)
 	}
 	fields := []string{}
@@ -71,6 +72,7 @@ func (m *Mysql) QueryFirst(sql string) (Row, error) {
 	}
 	row, res, err := m.db.QueryFirst(sql)
 	if err != nil {
+		Logger.Errorf("MYSQL run SQL: %s\n", sql)
 		return nil, errors.NewErr(err)
 	}
 	fields := []string{}
