@@ -48,7 +48,7 @@ func (e *GoEngine) Execute(script string, tplcfgs string) (map[string]*ReportRet
 	outputFile := fmt.Sprintf("%s%s.output", tmpdir, util.Token())
 	Logger.Infof("output file: %s", outputFile)
 	// run shell and save the result to a file
-	logfile := "/home/steven/var/code/go/src/github.com/go-steven/cube2/bin/go-engine/cube.log"
+	logfile := e.tmpdir + "cube2.log"
 	cmd := fmt.Sprintf(`cd %s; go build; ./%s --log=%s --tplcfg=%s --output=%s 2>&1`, tmpdir, path.Base(tmpdir), logfile, cfgFile, outputFile)
 	Logger.Infof("run shell: %s", cmd)
 	_, err := util.ExecShell(cmd)

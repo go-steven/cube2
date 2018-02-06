@@ -59,39 +59,51 @@ func (r *Reports) Run() (map[string]*ReportRet, error) {
 // 生成各个报表的数据，并发执行
 func (r *Reports) RunWithCfgs(tplCfgs cube.TplCfg) (map[string]*ReportRet, error) {
 	ret := make(map[string]*ReportRet)
+	m := new(sync.Mutex)  // 用于并发
+	var wg sync.WaitGroup // 用于并发
 	for k, v := range r.Cubes() {
 		if v == nil {
 			continue
 		}
-		c := v.Copy()
-		report := &ReportRet{
-			Name: k,
-		}
-		c.Replace(tplCfgs)
 
-		fields, err := c.Fields()
-		if err != nil {
-			Logger.Error(err)
-			return nil, err
-		}
-		rows, err := c.Rows()
-		if err != nil {
-			Logger.Error(err)
-			return nil, err
-		}
-		report.Data = rows
-		report.Fields = fields
+		wg.Add(1)
+		go func(name string, c cube.Cube) error {
+			defer wg.Done()
 
-		summary, err := c.Summary()
-		if err != nil {
-			Logger.Error(err)
-			return nil, err
-		}
-		if summary != nil {
-			report.Summary = summary
-		}
-		ret[k] = report
+			report := &ReportRet{
+				Name: name,
+			}
+			c.Replace(tplCfgs)
+
+			fields, err := c.Fields()
+			if err != nil {
+				Logger.Error(err)
+				return err
+			}
+			rows, err := c.Rows()
+			if err != nil {
+				Logger.Error(err)
+				return err
+			}
+			report.Data = rows
+			report.Fields = fields
+
+			summary, err := c.Summary()
+			if err != nil {
+				Logger.Error(err)
+				return err
+			}
+			if summary != nil {
+				report.Summary = summary
+			}
+			m.Lock()
+			ret[name] = report
+			m.Unlock()
+
+			return nil
+		}(k, v.Copy())
 	}
+	wg.Wait()
 	Logger.Infof("Run report: %s", util.Json(ret))
 	return ret, nil
 }
